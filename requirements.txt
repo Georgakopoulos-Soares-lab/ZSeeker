@@ -1,0 +1,12 @@
+biopython
+argparse
+pathlib
+termcolor
+numpy
+scipy
+pandas
+streamlit
+text-highlighter
+plotly
+altair==4.0
+matplotlib

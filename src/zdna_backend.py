@@ -1,0 +1,262 @@
+import uuid
+from Bio import SeqIO
+from pathlib import Path
+import pandas as pd
+import concurrent.futures
+import os
+from termcolor import colored
+import time
+from typing import Callable, Optional
+import numpy as np
+import functools
+from zdna_calculator import ZDNACalculatorSeq, Params
+from collections.abc import Iterable
+import logging
+from attrs import define, field
+import argparse
+
+
+@define(kw_only=True, slots=True, frozen=True)
+class ZDNASubmissionForm:
+    recordSeq: str = field(converter=str)
+    recordID: str = field(converter=str)
+    input_fasta: os.PathLike[str] = field(converter=str)
+
+def read_fasta(path: Path | str):
+    for record in SeqIO.parse(path, "fasta"):
+        yield (str(record.id), str(record.seq))
+
+def timeit(func: Callable) -> Callable:
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        print(colored("ZDNA extraction initialized.", "magenta"))
+        then = time.perf_counter()
+        result = func(*args, **kwargs)
+        now = time.perf_counter()
+        print(colored(f"Process finished within {now-then:.2f} second(s).", "magenta"))
+        return result
+    return wrapper
+
+def _extract(ID: int, sequence: str, params: Params) -> pd.DataFrame:
+    zdna_string = ZDNACalculatorSeq(data=sequence, params=params)
+    subarrays_detected = zdna_string.subarrays_above_threshold()
+    subarrays_detected = pd.DataFrame(subarrays_detected, columns=params.headers[1:-1])
+    scoring_array = zdna_string.scoring_array
+
+    if not len(subarrays_detected):
+        null_subarrays = pd.DataFrame([[np.nan]*len(params.headers)], columns=params.headers)
+        # Explicitly set the 'Chromosome' column to object dtype to avoid FutureWarning
+        null_subarrays['Chromosome'] = null_subarrays['Chromosome'].astype(object)
+        null_subarrays.loc[:, "Chromosome"] = ID
+        null_subarrays.loc[:, "Total Sequence Score"] = sum(scoring_array)
+        return null_subarrays
+
+    subarrays_detected.loc[:, "Chromosome"] = ID
+    subarrays_detected.loc[:, "Total Sequence Score"] = sum(scoring_array)
+    return subarrays_detected[params.headers]
+
+def _subextraction(submission_forms: list[ZDNASubmissionForm], params: Params) -> pd.DataFrame:
+    # process concurrently
+    outputs = []
+    for form in submission_forms:
+        try:
+            present_df = _extract(
+                ID=form.recordID,
+                sequence=form.recordSeq,
+                params=params
+            )
+            outputs.append(present_df)
+        except IndexError as e:
+            logging.error(
+                f"Failed to process input fasta '{Path(form.input_fasta).name}' on chromosome {str(form.recordID)}. "
+                f"Chromosome length: {len(str(form.recordSeq))}."
+            )
+            logging.error(f"Error message: '{e}'.")
+            continue
+
+    if outputs:
+        zdna_df = pd.concat(outputs, axis=0).reset_index(drop=True)
+    else:
+        zdna_df = pd.DataFrame(columns=params.headers)
+        logging.info("Empty dataframe derived from subprocess _subextraction")
+    return zdna_df
+
+def assign_tasks(tasks: list, total_buckets: int) -> list[list]:
+    then = time.perf_counter()
+    total = len(tasks)
+    step = total // total_buckets
+    remainder = total % total_buckets
+    assigned_tasks = []
+    infimum = 0
+    while True:
+        if remainder > 0:
+            supremum = infimum + step + 1
+            remainder -= 1
+        else:
+            supremum = infimum + step
+        assigned_tasks.append(tasks[infimum: supremum])
+
+        if len(assigned_tasks) == total_buckets:
+            break
+
+        infimum = supremum
+
+    now = time.perf_counter()
+
+    # only for testing purposes
+    try:
+        assigned_numpy_tasks = [job.tolist() for job in np.array_split(tasks, total_buckets)]
+    except Exception as e:
+        logging.error(e)
+        logging.error(f"Woops! Failed to use numpy splitting due to the following error '{e}'.")
+        assigned_numpy_tasks = None
+
+    if assigned_numpy_tasks is not None:
+        assert assigned_tasks == assigned_numpy_tasks, "Invalid task assignment."
+
+    print(colored(f"Task assignment completed within {now-then:.2f} second(s).", "green"))
+    return assigned_tasks
+
+def _postmerge_callback(future) -> None:
+    # This function can be implemented if needed
+    pass
+
+def sniff(iterable: Iterable) -> tuple[tuple[str, str], Iterable]:
+    try:
+        first = next(iterable)
+    except StopIteration:
+        return None
+    return first, itertools.chain([first], iterable)
+
+def extract_zdna_v2( path: str | os.PathLike[str], params: Params, n_jobs: int = 1 ) -> pd.DataFrame:
+    then = time.perf_counter()
+    zdna_df = pd.DataFrame(columns=params.headers)
+    outputs: list[pd.DataFrame] = []
+    assert isinstance(n_jobs, int) and n_jobs > 0, "Number of jobs must be a positive int."
+
+    submission_forms: list[ZDNASubmissionForm] = []
+    for rec_id, rec_seq in read_fasta(path):
+        submission_forms.append(
+            ZDNASubmissionForm(
+                recordSeq=rec_seq,
+                recordID=rec_id,
+                input_fasta=path
+            )
+        )
+    
+
+    # split into records
+    assigned_tasks = assign_tasks(submission_forms, n_jobs)
+    with concurrent.futures.ProcessPoolExecutor(max_workers=n_jobs) as executor:
+        results = executor.map(_subextraction, assigned_tasks, [params]*n_jobs)
+
+        for result in results:
+            print("Task finished.")
+            outputs.append(result)
+
+    zdna_df = pd.concat(outputs, axis=0).reset_index(drop=True)
+
+    now = time.perf_counter()
+    print(f"Process finished within {now-then:.2f} second(s).")
+
+    if params.display_sequence_score == 0:
+        zdna_df.drop(columns=['Total Sequence Score'], inplace=True)
+        zdna_df.dropna(inplace=True, axis=0)
+    return zdna_df
+
+@timeit
+def transform( path: Path | str, params: Params, max_resources_threshold: int, n_jobs: int = 1 ) -> pd.DataFrame:
+    logging.info(f"Processing file '{Path(path).name}'...")
+    # lazy loading
+    zdna_df = extract_zdna_v2(
+        path,
+        params,
+        n_jobs=n_jobs
+    )
+    print(colored("Saving Z-DNA dataframe...", "magenta"))
+    output_dir = Path("extractions_zdna_human")
+    output_dir.mkdir(exist_ok=True)
+    output_file = output_dir / f"{Path(path).stem}_zdna_score.csv"
+    zdna_df.to_csv(
+        output_file,
+        mode="w",
+        index=False
+    )
+
+    logging.info(f"File '{Path(path).name}' has been processed successfully.")
+    return zdna_df
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description="""Given a fasta file and the corresponding parameters
+                                                    it calculates the ZDNA for each
+                                                    sequence present.""")
+    parser.add_argument("--path", type=str, default="test_file.fna", help="Path to file analyzed")
+    parser.add_argument("--GC_weight", type=float, default=Params.GC_weight,
+                        help=f"Weight given to GC and CG transitions. Default = {Params.GC_weight}")
+    parser.add_argument("--AT_weight", type=float, default=Params.AT_weight,
+                        help=f"Weight given to AT and TA transitions. Default = {Params.AT_weight}")
+    parser.add_argument("--GT_weight", type=float, default=Params.GT_weight,
+                        help=f"Weight given to GT and TG transitions. Default = {Params.GT_weight}")
+    parser.add_argument("--AC_weight", type=float, default=Params.AC_weight,
+                        help=f"Weight given to AC and CA transitions. Default = {Params.AC_weight}")
+    parser.add_argument("--mismatch_penalty_starting_value", type=int, default=Params.mismatch_penalty_starting_value,
+                        help=f"Penalty applied to the first non purine/pyrimidine transition encountered. "
+                             f"Default = {Params.mismatch_penalty_starting_value}")
+    parser.add_argument("--mismatch_penalty_linear_delta", type=int, default=Params.mismatch_penalty_linear_delta,
+                        help=f"Only applies if penalty type is set to linear. Determines the rate of increase of the "
+                             f"penalty for every subsequent non purine/pyrimidine transition. "
+                             f"Default = {Params.mismatch_penalty_linear_delta}")
+    parser.add_argument("--mismatch_penalty_type", choices=Params.mismatch_penalty_choices,
+                        default=Params.mismatch_penalty_type,
+                        help=f"Method of scaling the penalty for contiguous non purine/pyrimidine transition. "
+                             f"Default = {Params.mismatch_penalty_type}")
+    parser.add_argument("--method", choices=Params.method_choices, default=Params.method,
+                        help=f"Method used for the Z-DNA scoring algorithm. See documentation for more details. "
+                             f"Default = {Params.method}")
+    parser.add_argument("--n_jobs", type=int, default=Params.n_jobs,
+                        help="Number of threads to use. Defaults to -1, which uses the maximum available threads on CPU")
+    parser.add_argument("--threshold", type=int, default=Params.threshold,
+                        help=f"Scoring threshold for a for a sequence to be considered potentially Z-DNA forming and "
+                             f"returned by the program. This parameter is also used for determining how big the scoring "
+                             f"drop within a sequence should be, before it is split into two separate Z-DNA candidate "
+                             f"sequences. Default={Params.threshold}")
+    parser.add_argument("--consecutive_AT_scoring", type=Iterable[str], default=Params.consecutive_AT_scoring,
+                        help=f"Consecutive AT repeats form a hairpin structure instead of Z-DNA. In order to reflect that, "
+                             f"a penalty array is defined, which provides the score adjustment for the first and the "
+                             f"subsequent TA appearances. The last element will be applied to every subsequent TA "
+                             f"appearance. For more information see documentation. Default = {Params.consecutive_AT_scoring}")
+    parser.add_argument("--max_resources_threshold", type=int, default=100_000)
+    parser.add_argument("--display_sequence_score", type=int, choices=[0, 1], default=0)
+
+    args = parser.parse_args()
+    _params = vars(args)
+    
+    max_resources_threshold = _params.pop("max_resources_threshold")
+    path = _params.pop("path")
+    n_jobs = _params.get("n_jobs")
+
+    for key in _params:
+        if key in ("consecutive_AT_scoring", "method", "mismatch_penalty_type", "path"):
+            continue
+        assert _params[key] >= 0.0, "Params must be a non-negative integer."
+
+    params = Params(**_params)
+    assert Path(path).expanduser().resolve().is_file(), f"No file {path} was found."
+
+    print(colored("Process parameters", "magenta"))
+    print(colored("*" * 25, "magenta"))
+    print(params)
+    for key, value in params.__new_dict__.items():
+        print(colored(f"{key}: {value}", "magenta"))
+
+    print(colored("*" * 25, "magenta"))
+
+    logging.basicConfig(
+        level=logging.INFO,
+        filemode="a",
+        filename="zdna_extractions.log",
+        format="%(levelname)s:%(message)s"
+    )
+    transform(path, params=params, n_jobs=n_jobs, max_resources_threshold=max_resources_threshold)
+
