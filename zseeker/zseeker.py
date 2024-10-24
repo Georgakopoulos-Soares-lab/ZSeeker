@@ -9,7 +9,7 @@ import time
 from typing import Callable, Optional
 import numpy as np
 import functools
-from zdna_calculator import ZDNACalculatorSeq, Params
+from .zdna_calculator import ZDNACalculatorSeq, Params
 from collections.abc import Iterable
 import logging
 from attrs import define, field
@@ -138,7 +138,7 @@ def extract_zdna_v2( path: str | os.PathLike[str], params: Params, n_jobs: int =
     for rec_id, rec_seq in read_fasta(path):
         submission_forms.append(
             ZDNASubmissionForm(
-                recordSeq=rec_seq,
+                recordSeq=rec_seq.upper(),
                 recordID=rec_id,
                 input_fasta=path
             )
@@ -186,7 +186,7 @@ def transform( path: Path | str, params: Params, max_resources_threshold: int, n
     logging.info(f"File '{Path(path).name}' has been processed successfully.")
     return zdna_df
 
-if __name__ == "__main__":
+def main():
 
     parser = argparse.ArgumentParser(description="""Given a fasta file and the corresponding parameters
                                                     it calculates the ZDNA for each
@@ -246,7 +246,6 @@ if __name__ == "__main__":
 
     print(colored("Process parameters", "magenta"))
     print(colored("*" * 25, "magenta"))
-    print(params)
     for key, value in params.__new_dict__.items():
         print(colored(f"{key}: {value}", "magenta"))
 
@@ -260,3 +259,5 @@ if __name__ == "__main__":
     )
     transform(path, params=params, n_jobs=n_jobs, max_resources_threshold=max_resources_threshold)
 
+if __name__ == "__main__":
+    main()

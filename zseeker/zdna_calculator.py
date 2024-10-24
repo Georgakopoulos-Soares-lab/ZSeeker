@@ -2,12 +2,12 @@ from Bio.Seq import Seq
 import numpy as np
 
 from typing import Optional
-from constants import Params
+from .constants import Params
 
 class ZDNACalculatorSeq(Seq):
 
     def __init__(self, data,  params: Optional[Params] = None) -> None:
-        super().__init__(data)
+        super().__init__(data.upper())
         self.scoring_array = []  # Calculate scoring array in subarrays method do do only when necessary
         if params is None:
             self.params = Params()

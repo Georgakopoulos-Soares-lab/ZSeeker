@@ -3,17 +3,17 @@ ZDNA tool
 
 # Installation
 ```bash
-pip install zdna_backend
+pip install ZSeeker
 ```
 
 # CLI Usage
 ```bash
-zdna_backend --path ./test_GCA_f.fasta --n_jobs 1 --method=coverage
+ZSeeker --path ./test_GCA_f.fasta --n_jobs 1 --method=coverage
 ```
 
 # Example: In Code usage
 ```python
-from zdna_calculator import ZDNACalculatorSeq, Params
+from zseeker.zdna_calculator import ZDNACalculatorSeq, Params
 # Define parameters
 params = Params(
     GC_weight=1.0,
@@ -29,7 +29,7 @@ params = Params(
     display_sequence_score=1
 )
 
-# Create a ZDNACalculatorSeq instance
+# Create a ZDNACalculatorSeq instance and nput sequence
 zdna_calculator = ZDNACalculatorSeq(data="ACGTACGTACGT", params=params)
 
 # Calculate subarrays above threshold
@@ -41,7 +41,7 @@ print(subarrays)
 
 # Command-line Help
 ```bash
-usage: zdna_backend.py [-h] [--path PATH] [--GC_weight GC_WEIGHT]
+usage: ZSeeker [-h] [--path PATH] [--GC_weight GC_WEIGHT]
                        [--AT_weight AT_WEIGHT] [--GT_weight GT_WEIGHT]
                        [--AC_weight AC_WEIGHT]
                        [--mismatch_penalty_starting_value MISMATCH_PENALTY_STARTING_VALUE]
@@ -91,3 +91,19 @@ optional arguments:
   --display_sequence_score {0,1}
                         Display the total sequence score (1) or not (0).
 ```
+
+
+# Example output file
+```
+Chromosome,Start,End,Z-DNA Score,Sequence
+Z1,0.0,15.0,87.0,TGCGTGCGCGCGCGCG
+Z2,0.0,15.0,87.0,GCGCCCGCGCGCGCGC
+Z3,0.0,11.0,71.0,GCGCGCGCGCGT
+Z4,0.0,11.0,65.0,GCGCGTGCGCGC
+Z5,0.0,10.0,70.0,CGCGCGCGCGC
+Z6,0.0,15.0,63.0,GCACGCACACGCGCGT
+Z7,0.0,10.0,70.0,GCGCGCGCGCG
+Z8,0.0,13.0,61.0,CGCACGCGCACGCA
+Z9,0.0,11.0,59.0,CGCGCGCGCACA
+```
+
