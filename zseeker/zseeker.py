@@ -152,6 +152,16 @@ def extract_zdna_v2(fasta: str | os.PathLike[str], params: Params) -> pd.DataFra
         zdna_df.dropna(inplace=True, axis=0)
     return zdna_df
 
+def parse_consecutive_AT_scoring(value: str) -> tuple[float, ...]:
+    # Split the string by commas and convert each value to float
+    try:
+        # Strip whitespace and split by comma
+        values = [float(x.strip()) for x in value.split(',')]
+        return tuple(values)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"Invalid consecutive_AT_scoring format: {e}")
+
+
 @timeit
 def transform(path: Path | str, params: Params) -> pd.DataFrame:
     logging.info(f"Processing file '{Path(path).name}'...")
@@ -201,11 +211,12 @@ def main():
                              f"returned by the program. This parameter is also used for determining how big the scoring "
                              f"drop within a sequence should be, before it is split into two separate Z-DNA candidate "
                              f"sequences. Default={Params.threshold}")
-    parser.add_argument("--consecutive_AT_scoring", type=Iterable[str], default=Params.consecutive_AT_scoring,
-                        help=f"Consecutive AT repeats form a hairpin structure instead of Z-DNA. In order to reflect that, "
-                             f"a penalty array is defined, which provides the score adjustment for the first and the "
-                             f"subsequent TA appearances. The last element will be applied to every subsequent TA "
-                             f"appearance. For more information see documentation. Default = {Params.consecutive_AT_scoring}")
+    parser.add_argument( "--consecutive_AT_scoring", type=parse_consecutive_AT_scoring, default=Params.consecutive_AT_scoring,
+        help=f"Consecutive AT repeats form a hairpin structure instead of Z-DNA. In order to reflect that, "
+            f"a penalty array is defined, which provides the score adjustment for the first and the "
+            f"subsequent TA appearances. The last element will be applied to every subsequent TA "
+            f"appearance. For more information see documentation. Default = {Params.consecutive_AT_scoring}"
+    )
     parser.add_argument("--display_sequence_score", type=int, choices=[0, 1], default=0)
     parser.add_argument("--output_dir", type=str, default="zdna_extractions")
 

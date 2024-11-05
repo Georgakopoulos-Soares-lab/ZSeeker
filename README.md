@@ -8,7 +8,7 @@ pip install ZSeeker
 
 # CLI Usage
 ```bash
-ZSeeker --path ./test_GCA_f.fasta --n_jobs 1 --method=coverage
+ZSeeker --fasta ./test_GCA_f.fasta --n_jobs 1 --method=coverage
 ```
 
 # Example: In Code usage
@@ -16,11 +16,11 @@ ZSeeker --path ./test_GCA_f.fasta --n_jobs 1 --method=coverage
 from zseeker.zdna_calculator import ZDNACalculatorSeq, Params
 # Define parameters
 params = Params(
-    GC_weight=1.0,
+    GC_weight=5.0,
     AT_weight=0.5,
-    GT_weight=0.3,
-    AC_weight=0.2,
-    mismatch_penalty_starting_value=5,
+    GT_weight=1.1,
+    AC_weight=1.3,
+    mismatch_penalty_starting_value=4,
     mismatch_penalty_linear_delta=2,
     mismatch_penalty_type='linear',
     method='coverage',
@@ -41,55 +41,76 @@ print(subarrays)
 
 # Command-line Help
 ```bash
-usage: ZSeeker [-h] [--path PATH] [--GC_weight GC_WEIGHT]
-                       [--AT_weight AT_WEIGHT] [--GT_weight GT_WEIGHT]
-                       [--AC_weight AC_WEIGHT]
-                       [--mismatch_penalty_starting_value MISMATCH_PENALTY_STARTING_VALUE]
-                       [--mismatch_penalty_linear_delta MISMATCH_PENALTY_LINEAR_DELTA]
-                       [--mismatch_penalty_type {linear,exponential}]
-                       [--method {coverage,score}] [--n_jobs N_JOBS]
-                       [--threshold THRESHOLD]
-                       [--consecutive_AT_scoring CONSECUTIVE_AT_SCORING]
-                       [--max_resources_threshold MAX_RESOURCES_THRESHOLD]
-                       [--display_sequence_score {0,1}]
+usage: ZSeeker [-h] [--fasta FASTA] [--GC_weight GC_WEIGHT]
+               [--AT_weight AT_WEIGHT] [--GT_weight GT_WEIGHT]
+               [--AC_weight AC_WEIGHT]
+               [--mismatch_penalty_starting_value MISMATCH_PENALTY_STARTING_VALUE]
+               [--mismatch_penalty_linear_delta MISMATCH_PENALTY_LINEAR_DELTA]
+               [--mismatch_penalty_type {linear,exponential}]
+               [--method {transitions,coverage,layered}]
+               [--n_jobs N_JOBS] [--threshold THRESHOLD]
+               [--consecutive_AT_scoring CONSECUTIVE_AT_SCORING]
+               [--display_sequence_score {0,1}]
+               [--output_dir OUTPUT_DIR]
 
-Given a fasta file and the corresponding parameters it calculates the ZDNA
-for each sequence present.
+Given a fasta file and the corresponding parameters it calculates the
+ZDNA for each sequence present.
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
-  --path PATH           Path to file analyzed
+  --fasta FASTA         Path to file analyzed
   --GC_weight GC_WEIGHT
                         Weight given to GC and CG transitions.
+                        Default = 7.0
   --AT_weight AT_WEIGHT
                         Weight given to AT and TA transitions.
+                        Default = 0.5
   --GT_weight GT_WEIGHT
                         Weight given to GT and TG transitions.
+                        Default = 1.25
   --AC_weight AC_WEIGHT
                         Weight given to AC and CA transitions.
+                        Default = 1.25
   --mismatch_penalty_starting_value MISMATCH_PENALTY_STARTING_VALUE
-                        Penalty applied to the first non purine/pyrimidine
-                        transition encountered.
+                        Penalty applied to the first non
+                        purine/pyrimidine transition encountered.
+                        Default = 3
   --mismatch_penalty_linear_delta MISMATCH_PENALTY_LINEAR_DELTA
-                        Determines the rate of increase of the penalty for
-                        every subsequent non purine/pyrimidine transition.
+                        Only applies if penalty type is set to
+                        linear. Determines the rate of increase of
+                        the penalty for every subsequent non
+                        purine/pyrimidine transition. Default = 3
   --mismatch_penalty_type {linear,exponential}
-                        Method of scaling the penalty for contiguous non
-                        purine/pyrimidine transitions.
-  --method {coverage,score}
+                        Method of scaling the penalty for contiguous
+                        non purine/pyrimidine transition. Default =
+                        linear
+  --method {transitions,coverage,layered}
                         Method used for the Z-DNA scoring algorithm.
-  --n_jobs N_JOBS       Number of threads to use. Defaults to -1, which uses
-                        the maximum available threads on CPU.
+                        See documentation for more details. Default =
+                        transitions
+  --n_jobs N_JOBS       Number of threads to use. Defaults to -1,
+                        which uses the maximum available threads on
+                        CPU
   --threshold THRESHOLD
-                        Scoring threshold for a sequence to be considered
-                        potentially Z-DNA forming.
+                        Scoring threshold for a for a sequence to be
+                        considered potentially Z-DNA forming and
+                        returned by the program. This parameter is
+                        also used for determining how big the scoring
+                        drop within a sequence should be, before it
+                        is split into two separate Z-DNA candidate
+                        sequences. Default=50
   --consecutive_AT_scoring CONSECUTIVE_AT_SCORING
-                        Penalty array for consecutive AT repeats forming
-                        hairpin structures.
-  --max_resources_threshold MAX_RESOURCES_THRESHOLD
-                        Maximum resources threshold.
+                        Consecutive AT repeats form a hairpin
+                        structure instead of Z-DNA. In order to
+                        reflect that, a penalty array is defined,
+                        which provides the score adjustment for the
+                        first and the subsequent TA appearances. The
+                        last element will be applied to every
+                        subsequent TA appearance. For more
+                        information see documentation. Default =
+                        (0.5, 0.5, 0.5, 0.5, 0.0, 0.0, -5.0, -100.0)
   --display_sequence_score {0,1}
-                        Display the total sequence score (1) or not (0).
+  --output_dir OUTPUT_DIR
 ```
 
 

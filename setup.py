@@ -7,11 +7,11 @@ with open('requirements.txt') as f:
 
 setup(
     name='ZSeeker',  # Package name
-    version='0.9',  # Version number
+    version='1.3',  # Version number
     description='ZSeeker is a cli tool to find the propensity of B-DNA to form Z-DNA structures. ',  # Short description
     long_description=open('README.md').read(),  # Full description from README.md
     long_description_content_type='text/markdown',  # Content type for long description
-    author='Patsakis Michail , Provatas Kimon, Ilias Georgakopoulos Soares, Ioannis Mouratidis',  # Your name
+    author='Nikol Chantzi, Patsakis Michail , Provatas Kimon, Ilias Georgakopoulos Soares, Ioannis Mouratidis',  # Your name
     author_email='kap6605@psu.edu , mpp5977@psu.edu',  # Your email
     url='https://github.com/Georgakopoulos-Soares-lab/ZSeeker',  # URL to your project (optional)
     packages=find_packages(),  # Automatically find all packages in the project
@@ -30,4 +30,3 @@ setup(
         required
     ],
 )
-
