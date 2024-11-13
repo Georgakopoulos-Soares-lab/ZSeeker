@@ -201,9 +201,6 @@ def main():
                         default=Params.mismatch_penalty_type,
                         help=f"Method of scaling the penalty for contiguous non purine/pyrimidine transition. "
                              f"Default = {Params.mismatch_penalty_type}")
-    parser.add_argument("--method", choices=Params.method_choices, default=Params.method,
-                        help=f"Method used for the Z-DNA scoring algorithm. See documentation for more details. "
-                             f"Default = {Params.method}")
     parser.add_argument("--n_jobs", type=int, default=Params.n_jobs,
                         help="Number of threads to use. Defaults to -1, which uses the maximum available threads on CPU")
     parser.add_argument("--threshold", type=int, default=Params.threshold,

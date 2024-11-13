@@ -8,7 +8,7 @@ pip install ZSeeker
 
 # CLI Usage
 ```bash
-ZSeeker --fasta ./test_GCA_f.fasta --n_jobs 1 --method=coverage
+ZSeeker --fasta ./test_GCA_f.fasta --n_jobs 1
 ```
 
 # Example: In Code usage
@@ -23,7 +23,6 @@ params = Params(
     mismatch_penalty_starting_value=4,
     mismatch_penalty_linear_delta=2,
     mismatch_penalty_type='linear',
-    method='coverage',
     threshold=10,
     consecutive_AT_scoring=[1, 2, 2],
     display_sequence_score=1
@@ -47,7 +46,6 @@ usage: ZSeeker [-h] [--fasta FASTA] [--GC_weight GC_WEIGHT]
                [--mismatch_penalty_starting_value MISMATCH_PENALTY_STARTING_VALUE]
                [--mismatch_penalty_linear_delta MISMATCH_PENALTY_LINEAR_DELTA]
                [--mismatch_penalty_type {linear,exponential}]
-               [--method {transitions,coverage,layered}]
                [--n_jobs N_JOBS] [--threshold THRESHOLD]
                [--consecutive_AT_scoring CONSECUTIVE_AT_SCORING]
                [--display_sequence_score {0,1}]
@@ -84,10 +82,6 @@ options:
                         Method of scaling the penalty for contiguous
                         non purine/pyrimidine transition. Default =
                         linear
-  --method {transitions,coverage,layered}
-                        Method used for the Z-DNA scoring algorithm.
-                        See documentation for more details. Default =
-                        transitions
   --n_jobs N_JOBS       Number of threads to use. Defaults to -1,
                         which uses the maximum available threads on
                         CPU
