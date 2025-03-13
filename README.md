@@ -50,6 +50,7 @@ usage: ZSeeker [-h] [--fasta FASTA] [--GC_weight GC_WEIGHT]
                [--consecutive_AT_scoring CONSECUTIVE_AT_SCORING]
                [--display_sequence_score {0,1}]
                [--output_dir OUTPUT_DIR]
+               [--gff_file GFF_FILE]
 
 Given a fasta file and the corresponding parameters it calculates the
 ZDNA for each sequence present.
@@ -105,20 +106,37 @@ options:
                         (0.5, 0.5, 0.5, 0.5, 0.0, 0.0, -5.0, -100.0)
   --display_sequence_score {0,1}
   --output_dir OUTPUT_DIR
+  --gff Optional GFF file for gene annotation. Only 'gene' features are used.
 ```
 
 
 # Example output file
-```
-Chromosome,Start,End,Z-DNA Score,Sequence
-Z1,0.0,15.0,87.0,TGCGTGCGCGCGCGCG
-Z2,0.0,15.0,87.0,GCGCCCGCGCGCGCGC
-Z3,0.0,11.0,71.0,GCGCGCGCGCGT
-Z4,0.0,11.0,65.0,GCGCGTGCGCGC
-Z5,0.0,10.0,70.0,CGCGCGCGCGC
-Z6,0.0,15.0,63.0,GCACGCACACGCGCGT
-Z7,0.0,10.0,70.0,GCGCGCGCGCG
-Z8,0.0,13.0,61.0,CGCACGCGCACGCA
-Z9,0.0,11.0,59.0,CGCGCGCGCACA
-```
+
+|Chromosome|Start|End  |Z-DNA Score|Sequence                                    |
+|----------|-----|-----|-----------|--------------------------------------------|
+|Z1        |0.0  |15.0 |87.0       |TGCGTGCGCGCGCGCG                            |
+|Z2        |0.0  |15.0 |87.0       |GCGCCCGCGCGCGCGC                            |
+|Z3        |0.0  |11.0 |71.0       |GCGCGCGCGCGT                                |
+|Z4        |0.0  |11.0 |65.0       |GCGCGTGCGCGC                                |
+|Z5        |0.0  |10.0 |70.0       |CGCGCGCGCGC                                 |
+|Z6        |0.0  |15.0 |63.0       |GCACGCACACGCGCGT                            |
+|Z7        |0.0  |10.0 |70.0       |GCGCGCGCGCG                                 |
+|Z8        |0.0  |13.0 |61.0       |CGCACGCGCACGCA                              |
+|Z9        |0.0  |11.0 |59.0       |CGCGCGCGCACA                                |
+
+
+# Example output file with annotations
+
+|Chromosome|Start|End  |Z-DNA Score|Sequence                                    |gene_start|gene_end|gene_id       |gene_biotype  |strand|distance|distance_from_TSS|distance_from_TES|
+|----------|-----|-----|-----------|--------------------------------------------|----------|--------|--------------|--------------|------|--------|-----------------|-----------------|
+|AE004438.1|364  |391  |63.0       |ACGGTGCCGCAGCGGCCGTGTCGCCAGC                |362       |812     |gene-VNG_6001H|protein_coding|-     |0       |420              |2                |
+|AE004438.1|2317 |2335 |51.5       |GCGGCGAGTCGCCGTCGCG                         |1904      |3719    |gene-VNG_6007H|protein_coding|-     |0       |1383             |413              |
+|AE004438.1|3528 |3538 |52.75      |ACGTGCGCGCG                                 |1904      |3719    |gene-VNG_6007H|protein_coding|-     |0       |180              |1624             |
+|AE004438.1|12771|12814|109.25     |GCTGTCGCTGTCGGCGGCGGCTGCCGCCGACGCGACAGCGTCGC|12846     |13380   |gene-VNG_6015H|protein_coding|-     |32      |565              |32               |
+|AE004438.1|13178|13195|56.0       |ACGGCGCGTCAGCGGCGT                          |12846     |13380   |gene-VNG_6015H|protein_coding|-     |0       |184              |332              |
+|AE004438.1|13533|13552|52.75      |ACGGCGCACCGCCAGCGTGT                        |12846     |13380   |gene-VNG_6015H|protein_coding|-     |153     |154              |687              |
+|AE004438.1|13853|13872|70.0       |CGTCGGCGCACGCGCCGACG                        |14307     |15582   |gene-VNG_6016H|protein_coding|+     |435     |435              |1709             |
+|AE004438.1|14960|14971|51.25      |GCGCGGTCGCGC                                |14307     |15582   |gene-VNG_6016H|protein_coding|+     |0       |653              |610              |
+|AE004438.1|15105|15126|61.0       |CGCGTCGTCGGCGTCCGCGACG                      |14307     |15582   |gene-VNG_6016H|protein_coding|+     |0       |798              |455              |
+
 
