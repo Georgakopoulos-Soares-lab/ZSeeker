@@ -139,4 +139,11 @@ options:
 |AE004438.1|14960|14971|51.25      |GCGCGGTCGCGC                                |14307     |15582   |gene-VNG_6016H|protein_coding|+     |0       |653              |610              |
 |AE004438.1|15105|15126|61.0       |CGCGTCGTCGGCGTCCGCGACG                      |14307     |15582   |gene-VNG_6016H|protein_coding|+     |0       |798              |455              |
 
+# ZSeeker web application
+
+The web version of ZSeeker can be found at:
+[ZSeeker web application](https://zseeker.netlify.app)
+
+And a dockerized version of it can be found at this repository for local deployments:
+[ZSeeker web application dockerized](https://github.com/Georgakopoulos-Soares-lab/ZSeeker_docker)
 
