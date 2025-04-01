@@ -1,4 +1,5 @@
-ZDNA tool
+# ZSeeker
+
 ==============
 
 # Installation
@@ -26,6 +27,8 @@ params = Params(
     threshold=10,
     consecutive_AT_scoring=[1, 2, 2],
     display_sequence_score=1
+    drop_threshold=50,
+    total_sequence_scoring=False
 )
 
 # Create a ZDNACalculatorSeq instance and nput sequence
@@ -51,6 +54,8 @@ usage: ZSeeker [-h] [--fasta FASTA] [--GC_weight GC_WEIGHT]
                [--display_sequence_score {0,1}]
                [--output_dir OUTPUT_DIR]
                [--gff_file GFF_FILE]
+               [--drop_threshold DROP_THRESHOLD]
+               [--total_sequence_scoring]
 
 Given a fasta file and the corresponding parameters it calculates the
 ZDNA for each sequence present.
@@ -106,7 +111,15 @@ options:
                         (0.5, 0.5, 0.5, 0.5, 0.0, 0.0, -5.0, -100.0)
   --display_sequence_score {0,1}
   --output_dir OUTPUT_DIR
-  --gff Optional GFF file for gene annotation. Only 'gene' features are used.
+  --gff_file GFF_FILE Optional GFF file for gene annotation. Only 'gene' features are used.
+  --drop_threshold DROP_THRESHOLD
+                        Drop threshold used within subarrays
+                        detection logic. Default = 50.
+  --total_sequence_scoring
+                        If set, compute only a single
+                        transitions-based total score per
+                        sequence (one row each). Skips subarray
+                        detection altogether.
 ```
 
 

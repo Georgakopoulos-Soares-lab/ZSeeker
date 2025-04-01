@@ -48,20 +48,20 @@ def read_fasta(fasta: Path | str) -> Iterator[tuple[str, str]]:
         file = open(fasta, encoding='utf-8', mode='r')
 
     for record in SimpleFastaParser(file):
-        # record[0] -> header line
-        # record[1] -> sequence
         yield record[0].split(' ')[0], record[1]
     file.close()
 
 def _extract(ID: int, sequence: str, params: Params) -> pd.DataFrame:
     """
-    For a given sequence, calculates Z-DNA regions above threshold and returns
-    them as a DataFrame.
+    For a given sequence, calculates Z-DNA regions above threshold (subarrays).
+    Returns them as a DataFrame.
     """
     zdna_string = ZDNACalculatorSeq(data=sequence, params=params)
     subarrays_detected = zdna_string.subarrays_above_threshold()
-    subarrays_detected = pd.DataFrame(subarrays_detected, columns=params.headers[1:-1])
     scoring_array = zdna_string.scoring_array
+
+    # subarrays_detected will have shape: [ (start, end, score, substring), ... ]
+    subarrays_detected = pd.DataFrame(subarrays_detected, columns=params.headers[1:-1])
 
     if not len(subarrays_detected):
         # If no subarrays found, produce a row of NaNs for consistency
@@ -111,7 +111,6 @@ def assign_tasks(tasks: list, total_buckets: int) -> list[list]:
     if total_buckets <= 0:
         total_buckets = 1
     if total_buckets > total:
-        # If we have more buckets than tasks, some buckets will be empty
         total_buckets = total
 
     step = total // total_buckets
@@ -138,17 +137,17 @@ def assign_tasks(tasks: list, total_buckets: int) -> list[list]:
 def extract_zdna_v2(fasta: str | os.PathLike[str], params: Params) -> pd.DataFrame:
     """
     Main entry point for extracting Z-DNA subarrays from a FASTA file
-    using parallel processing according to params.n_jobs.
+    using parallel processing. If `params.total_sequence_scoring` is True,
+    then skip subarray detection, returning a single transitions-based
+    total score per sequence ID in the columns:
+      Chromosome, Start, End, Z-DNA Score, Sequence
     """
     then = time.perf_counter()
-    zdna_df = pd.DataFrame(columns=params.headers)
     outputs: list[pd.DataFrame] = []
     n_jobs = params.n_jobs
     assert isinstance(n_jobs, int) and n_jobs > 0, "Number of jobs must be a positive int."
 
     submission_forms: list[ZDNASubmissionForm] = []
-
-    # Gather sequences
     for rec_id, rec_seq in read_fasta(fasta):
         submission_forms.append(
             ZDNASubmissionForm(
@@ -158,9 +157,36 @@ def extract_zdna_v2(fasta: str | os.PathLike[str], params: Params) -> pd.DataFra
             )
         )
 
-    total_submission_forms = len(submission_forms)
+    # ----------------------------------------------------------------------
+    # If total_sequence_scoring == True, we skip the subarray approach
+    # and produce a single row per FASTA record with:
+    # Chromosome, Start=0, End=len(sequence)-1, Z-DNA Score=<sum of transitions>, Sequence
+    # ----------------------------------------------------------------------
+    if params.total_sequence_scoring:
+        records = []
+        for form in submission_forms:
+            zcalc = ZDNACalculatorSeq(data=form.recordSeq, params=params)
+            scoring_arr = zcalc.zdna_calculator_transitions()
+            total_score = sum(scoring_arr)
+            records.append({
+                "Chromosome": form.recordID,
+                "Start": 0,
+                "End": len(form.recordSeq) - 1,
+                "Z-DNA Score": total_score,
+                "Sequence": form.recordSeq
+            })
 
-    # Assign tasks for parallel extraction
+        # We enforce a known column order for consistency
+        df = pd.DataFrame(
+            records,
+            columns=["Chromosome", "Start", "End", "Z-DNA Score", "Sequence"]
+        )
+        now = time.perf_counter()
+        print(f"Process finished within {now-then:.2f} second(s).")
+        return df
+    # ----------------------------------------------------------------------
+
+    # Otherwise, do the usual subarray-finding approach:
     assigned_tasks = assign_tasks(submission_forms, n_jobs)
     with concurrent.futures.ProcessPoolExecutor(
         max_workers=n_jobs, mp_context=mp.get_context("spawn")
@@ -179,13 +205,12 @@ def extract_zdna_v2(fasta: str | os.PathLike[str], params: Params) -> pd.DataFra
         for seqID in seqID_without_zdna:
             print(seqID)
 
-    if total_submission_forms > seqID_observed:
+    if len(submission_forms) > seqID_observed:
         logging.warning("Z-DNA was not detected in all submitted sequence IDs.")
 
     now = time.perf_counter()
     print(f"Process finished within {now-then:.2f} second(s).")
 
-    # If display_sequence_score == 0, drop totalSequenceScore and also drop rows of all NaN
     if params.display_sequence_score == 0:
         zdna_df.drop(columns=['totalSequenceScore'], inplace=True, errors='ignore')
         zdna_df.dropna(axis=0, how='all', inplace=True)
@@ -194,7 +219,7 @@ def extract_zdna_v2(fasta: str | os.PathLike[str], params: Params) -> pd.DataFra
 
 def parse_consecutive_AT_scoring(value: str) -> tuple[float, ...]:
     """
-    Parse a comma-separated string of floats (like "3.0, 1.5, 0.7") into a tuple[float,...].
+    Parse a comma-separated string of floats (like "3.0,1.5,0.7") into a tuple[float,...].
     """
     try:
         values = [float(x.strip()) for x in value.split(',')]
@@ -208,9 +233,9 @@ def parse_gff_file(gff_path: Path) -> pd.DataFrame:
     Returns a DataFrame with columns:
       Chromosome, gene_start, gene_end, strand, gene_id, gene_biotype, locus_tag
 
-    Important: GFF is usually 1-based inclusive. We convert to 0-based inclusive
-    by subtracting 1 from both start and end so that it matches
-    the 0-based indexing used in the Z-DNA pipeline.
+    GFF is usually 1-based inclusive. We convert to 0-based inclusive
+    by subtracting 1 from both start and end to match the 0-based
+    indexing used in the Z-DNA pipeline.
     """
     rows = []
     with open(gff_path, 'r') as f:
@@ -223,16 +248,13 @@ def parse_gff_file(gff_path: Path) -> pd.DataFrame:
 
             feature_type = parts[2]
             if feature_type.lower() != 'gene':
-                # skip everything but actual 'gene' features
                 continue
 
             chrom = parts[0]
-            # Convert 1-based [start, end] to 0-based inclusive
             start = int(parts[3]) - 1
             end = int(parts[4]) - 1
             strand = parts[6]
 
-            # The last column has attributes in the form: key1=value1;key2=value2;...
             attributes = parts[8].split(';')
             attr_dict = {}
             for kv in attributes:
@@ -255,7 +277,6 @@ def parse_gff_file(gff_path: Path) -> pd.DataFrame:
             })
 
     df = pd.DataFrame(rows)
-    # Sort by gene_start ascending (this helps us do binary search quickly)
     df.sort_values(by=["Chromosome", "gene_start"], inplace=True)
     return df.reset_index(drop=True)
 
@@ -267,16 +288,8 @@ def compute_distances(ir_start: int,
     """
     Returns (distance, distance_from_TSS, distance_from_TES) for an IR (ir_start, ir_end)
     and a gene (gene_start, gene_end, strand).
-
-    - For a plus-strand gene, TSS = gene_start, TES = gene_end.
-    - For a minus-strand gene, TSS = gene_end,   TES = gene_start.
-    - distance=0 if there's any overlap; otherwise it's the minimal gap
-      between the IR and the gene.
     """
-    # Check overlap: IR_end < gene_start means IR is entirely to the left,
-    # or IR_start > gene_end means IR is entirely to the right.
     overlap = not (ir_end < gene_start or ir_start > gene_end)
-
     if strand == '+':
         TSS = gene_start
         TES = gene_end
@@ -289,11 +302,9 @@ def compute_distances(ir_start: int,
         if overlap:
             dist_tss = max(ir_start - TSS, 0)
         else:
-            # IR fully to the left
             if ir_end < gene_start:
                 dist_tss = gene_start - ir_end
             else:
-                # IR fully to the right
                 dist_tss = ir_start - TSS
     else:  # '-'
         if overlap:
@@ -309,10 +320,7 @@ def compute_distances(ir_start: int,
         if overlap:
             dist_tes = max(gene_end - ir_end, 0)
         else:
-            if ir_start > gene_end:
-                dist_tes = ir_start - gene_end
-            else:
-                dist_tes = gene_end - ir_end
+            dist_tes = ir_start - gene_end if ir_start > gene_end else gene_end - ir_end
     else:  # '-'
         if overlap:
             dist_tes = max(ir_start - TES, 0) if ir_start > TES else 0
@@ -322,11 +330,10 @@ def compute_distances(ir_start: int,
             else:
                 dist_tes = ir_start - gene_start
 
-    # Overall distance (0 if overlap)
+    # Overall distance
     if overlap:
         distance = 0
     else:
-        # Minimal gap from gene boundaries
         left_gap = gene_start - ir_end if ir_end < gene_start else None
         right_gap = ir_start - gene_end if ir_start > gene_end else None
         possible_gaps = [abs(g) for g in (left_gap, right_gap) if g is not None]
@@ -337,15 +344,10 @@ def compute_distances(ir_start: int,
 def annotate_closest_gene_in_chromosome(chrom_ir_df: pd.DataFrame,
                                         chrom_gene_df: pd.DataFrame) -> pd.DataFrame:
     """
-    For IRs in a single chromosome, find the closest gene from chrom_gene_df (also for that chromosome).
-    Both DataFrames are assumed sorted by 'Start' (IR) and 'gene_start' (genes) respectively.
-    Uses binary search to find candidate genes.
-    Returns a new DataFrame with annotation columns appended:
-        gene_start, gene_end, gene_id, gene_biotype, strand,
-        distance, distance_from_TSS, distance_from_TES
+    For IRs in a single chromosome, find the closest gene from chrom_gene_df.
+    Returns a new DataFrame with annotation columns appended.
     """
     if chrom_ir_df.empty or chrom_gene_df.empty:
-        # Just fill with NaNs
         chrom_ir_df["gene_start"] = np.nan
         chrom_ir_df["gene_end"] = np.nan
         chrom_ir_df["gene_id"] = np.nan
@@ -356,10 +358,7 @@ def annotate_closest_gene_in_chromosome(chrom_ir_df: pd.DataFrame,
         chrom_ir_df["distance_from_TES"] = np.nan
         return chrom_ir_df
 
-    # Sort IR data by IR start
     chrom_ir_df = chrom_ir_df.sort_values(by="Start").reset_index(drop=True)
-
-    # We'll store gene_start in a list for binary search
     gene_starts = chrom_gene_df["gene_start"].tolist()
 
     new_cols = {
@@ -376,17 +375,12 @@ def annotate_closest_gene_in_chromosome(chrom_ir_df: pd.DataFrame,
     for idx, row in chrom_ir_df.iterrows():
         ir_start = int(row["Start"])
         ir_end = int(row["End"])
-
-        # Binary-search the position of ir_start in gene_starts
         i = bisect.bisect_left(gene_starts, ir_start)
-
         best_dist = None
         best_entry = None
         best_dist_tss = None
         best_dist_tes = None
 
-        # We'll check the gene at index i, plus neighbors i-1, i+1,
-        # because the closest gene might be just before or after the insertion point.
         candidates_idx = []
         for offset in [i, i-1, i+1]:
             if 0 <= offset < len(chrom_gene_df):
@@ -437,7 +431,6 @@ def process_chromosome_group(chrom_group, gene_groups):
     """
     chrom_name, chrom_ir_df = chrom_group
     if chrom_name not in gene_groups:
-        # No genes on this chromosome
         chrom_ir_df["gene_start"] = np.nan
         chrom_ir_df["gene_end"] = np.nan
         chrom_ir_df["gene_id"] = np.nan
@@ -455,9 +448,6 @@ def process_chunk_of_chrom_groups(chunk, gene_groups):
     """
     For a list of chromosome groups (chunk), process each group
     and return a single DataFrame with all results concatenated.
-
-    If the chunk is empty, returns an empty DataFrame.
-    If all DataFrames are empty, also returns an empty DataFrame.
     """
     if not chunk:
         return pd.DataFrame()
@@ -468,9 +458,7 @@ def process_chunk_of_chrom_groups(chunk, gene_groups):
         if df_annotated is not None:
             dfs.append(df_annotated)
 
-    # Filter out any empty dataframes before concatenating
     dfs_non_empty = [d for d in dfs if not d.empty]
-
     if not dfs_non_empty:
         return pd.DataFrame()
     return pd.concat(dfs_non_empty, ignore_index=True)
@@ -479,11 +467,9 @@ def annotate_closest_gene(zdna_df: pd.DataFrame, gff_df: pd.DataFrame, n_jobs: i
     """
     For each chromosome in zdna_df, find the closest gene from gff_df
     (filtered by that chromosome). Uses binary search on sorted gene
-    coordinates for efficiency. Parallelizes at the chromosome level
-    using n_jobs.
+    coordinates. Parallelizes at the chromosome level using n_jobs.
     """
     if zdna_df.empty or gff_df.empty:
-        # Edge case: no data or no genes
         for col in [
             "gene_start","gene_end","gene_id","gene_biotype","strand",
             "distance","distance_from_TSS","distance_from_TES"
@@ -491,14 +477,10 @@ def annotate_closest_gene(zdna_df: pd.DataFrame, gff_df: pd.DataFrame, n_jobs: i
             zdna_df[col] = np.nan
         return zdna_df
 
-    # Group IR by chromosome
     zdna_groups = list(zdna_df.groupby("Chromosome"))
-    # Group genes by chromosome
     gene_groups = dict(tuple(gff_df.groupby("Chromosome")))
 
-    # Split the chromosome groups into chunks for parallel processing
     assigned_tasks = assign_tasks(zdna_groups, n_jobs)
-
     results = []
     with concurrent.futures.ProcessPoolExecutor(
         max_workers=n_jobs, mp_context=mp.get_context("spawn")
@@ -521,7 +503,6 @@ def annotate_closest_gene(zdna_df: pd.DataFrame, gff_df: pd.DataFrame, n_jobs: i
     if results:
         annotated_df = pd.concat(results, ignore_index=True)
     else:
-        # If all chunks were empty or had no results
         annotated_df = pd.DataFrame(
             columns=zdna_df.columns.tolist() + [
                 "gene_start","gene_end","gene_id","gene_biotype","strand",
@@ -541,11 +522,12 @@ def transform(path: Path | str, params: Params, gff_file: Path | None = None) ->
     output_dir = Path(output_dir).resolve()
     output_dir.mkdir(exist_ok=True)
 
-    # 1) Extract Z-DNA
+    # 1) Extract Z-DNA or total transitions score
     zdna_df = extract_zdna_v2(path, params)
 
     # 2) If a GFF file is specified, parse and annotate
-    if gff_file is not None and gff_file.is_file() and not zdna_df.empty:
+    #    (skip if total_sequence_scoring is True, because there's only one row per sequence)
+    if gff_file is not None and gff_file.is_file() and not zdna_df.empty and not params.total_sequence_scoring:
         print(colored(f"Annotating Z-DNA results with genes from '{gff_file.name}'...", "cyan"))
         gff_df = parse_gff_file(gff_file)
         zdna_df = annotate_closest_gene(zdna_df, gff_df, params.n_jobs)
@@ -593,23 +575,19 @@ def main():
                         help="Output directory for CSV files.")
     parser.add_argument("--gff_file", type=str, default=None,
                         help="Optional GFF file for gene annotation. Only 'gene' features are used.")
+    parser.add_argument("--drop_threshold", type=float, default=50,
+                        help="Drop threshold used within subarrays detection logic. Default = 50.")
+    parser.add_argument("--total_sequence_scoring", action="store_true",
+                        help="If set, compute only a single transitions-based total score per sequence (one row each). "
+                             "Skips subarray detection altogether.")
 
     args = parser.parse_args()
     _params = vars(args)
     fasta = _params.pop("fasta")
-
-    # Grab the gff_file path (may be None)
     gff_path = _params.pop("gff_file", None)
     gff_path = Path(gff_path) if gff_path else None
 
-    # Basic param validation
-    for key in _params:
-        if key in ("consecutive_AT_scoring", "method", "mismatch_penalty_type", "output_dir"):
-            continue
-        assert _params[key] is not None, f"Parameter '{key}' cannot be None."
-        if isinstance(_params[key], (int, float)) and key not in ("mismatch_penalty_type",):
-            assert _params[key] >= 0.0, f"Param {key} must be a non-negative value."
-
+    # Build the Params object
     params = Params(**_params)
     fasta_path = Path(fasta).expanduser().resolve()
     assert fasta_path.is_file(), f"No file {fasta} was found."

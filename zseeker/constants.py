@@ -18,6 +18,8 @@ class Params:
     cadence_reward: float = 1
     method: str = "transitions"
     threshold: int = 50
+    drop_threshold: int = 50
+    total_sequence_scoring: bool = False
     headers: list[str] = field(repr=False,
                                default_factory=lambda : ["Chromosome",
                                                          "Start",
