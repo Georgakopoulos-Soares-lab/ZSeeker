@@ -576,10 +576,9 @@ def main():
     parser.add_argument("--gff_file", type=str, default=None,
                         help="Optional GFF file for gene annotation. Only 'gene' features are used.")
     parser.add_argument("--drop_threshold", type=float, default=50,
-                        help="Drop threshold used within subarrays detection logic. Default = 50.")
+                        help="Drop threshold used within subarrays detection logic. Acts as earlier stopping threshold. Lower values result in smaller Z-DNA sequences and larger values result in fewer but larger Z-DNA sequences.")
     parser.add_argument("--total_sequence_scoring", action="store_true",
-                        help="If set, compute only a single transitions-based total score per sequence (one row each). "
-                             "Skips subarray detection altogether.")
+                        help="If set, calculate the total score of all provided sequences, without looking for Z-DNA subsequences. Useful for researchers who have short sequences and want to estimate their Z-DNA potential.")
 
     args = parser.parse_args()
     _params = vars(args)

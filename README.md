@@ -113,13 +113,9 @@ options:
   --output_dir OUTPUT_DIR
   --gff_file GFF_FILE Optional GFF file for gene annotation. Only 'gene' features are used.
   --drop_threshold DROP_THRESHOLD
-                        Drop threshold used within subarrays
-                        detection logic. Default = 50.
+                        Drop threshold used within subarrays detection logic. Acts as earlier stopping threshold. Lower values result in smaller Z-DNA sequences and larger values result in fewer but larger Z-DNA sequences.
   --total_sequence_scoring
-                        If set, compute only a single
-                        transitions-based total score per
-                        sequence (one row each). Skips subarray
-                        detection altogether.
+                        If set, calculate the total score of all provided sequences, without looking for Z-DNA subsequences. Useful for researchers who have short sequences and want to estimate their Z-DNA potential.
 ```
 
 
