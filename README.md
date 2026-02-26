@@ -156,3 +156,9 @@ The web version of ZSeeker can be found at:
 And a dockerized version of it can be found at this repository for local deployments:
 [ZSeeker web application dockerized](https://github.com/Georgakopoulos-Soares-lab/ZSeeker_docker)
 
+# Citation
+
+If you found ZSeeker useful, please consider citing:
+
+Wang, G., Mouratidis, I., Provatas, K., Chantzi, N., Patsakis, M., Georgakopoulos-Soares, I., & Vasquez, K. M. (2025). ZSeeker: an optimized algorithm for Z-DNA detection in genomic sequences. Briefings in Bioinformatics, 26(3). https://doi.org/10.1093/bib/bbaf240
+
